@@ -6,6 +6,11 @@ import {
 } from '../../../apps/web/lib/chat/tabular-visualization';
 import { inferTabularPlan } from '../../../apps/web/lib/chat/tabular-query-plan';
 import { hasRetrievedPdfEvidence } from '../../../apps/web/lib/chat/visual-routing';
+import {
+  compactTabularRowsForConversation,
+  extractConversationEvidence,
+  isTabularFollowUp,
+} from '../../../apps/web/lib/chat/conversation-memory';
 
 test('bounds retrieved source payloads before the next model step', () => {
   const compacted = compactToolContextForModel([
@@ -36,6 +41,38 @@ test('bounds retrieved source payloads before the next model step', () => {
   expect(value.hits).toHaveLength(4);
   expect(value.hits[0].text).toHaveLength(1_200);
   expect(value.hits[0].metadata).not.toHaveProperty('images');
+});
+
+test('keeps large spreadsheet follow-up evidence compact and source-scoped', () => {
+  const rows = compactTabularRowsForConversation(
+    Array.from({ length: 100 }, (_, index) => ({
+      Institution: `University ${index}`,
+      Notes: 'reported metric '.repeat(200),
+    })),
+    ['Institution', 'Notes'],
+  );
+  expect(rows).toHaveLength(25);
+  expect(JSON.stringify(rows).length).toBeLessThanOrEqual(12_000);
+
+  const evidence = extractConversationEvidence([
+    {
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool-queryTabularData',
+          input: { datasetId: 'education-1' },
+          output: {
+            columns: ['International Bachelor dropout, first 3 semesters'],
+            rows: [{ 'International Bachelor dropout, first 3 semesters': '16%' }],
+            totalRows: 1,
+          },
+        },
+      ],
+    },
+  ]);
+  expect(isTabularFollowUp('Are the dropout rates administratively observed?', evidence)).toBe(
+    true,
+  );
 });
 
 test('creates a chart from a queried grouped result without another model tool call', () => {

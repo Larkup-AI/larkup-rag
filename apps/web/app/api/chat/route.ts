@@ -567,27 +567,39 @@ export async function POST(req: Request) {
       tabularColumnNames = datasets.flatMap((dataset) =>
         dataset.columns.map((column) => column.name),
       );
-      tabularContext = `\n\nAvailable tabular datasets:\n${datasets
+      const visibleDatasets = datasets.slice(0, 8);
+      tabularContext = `\n\nAvailable tabular datasets:\n${visibleDatasets
         .map((d) => {
-          const colDescriptions = d.columns
+          const visibleColumns = d.columns.slice(0, 60);
+          const colDescriptions = visibleColumns
             .map((c) => {
               let desc = `${c.name} (${c.type})`;
               if (c.type === 'date' && c.dateRange) {
                 desc += ` [format: ${c.dateRange.format}, range: ${c.dateRange.min} to ${c.dateRange.max}]`;
               }
               if (c.sampleValues && c.sampleValues.length > 0) {
-                desc += ` [samples: ${c.sampleValues.slice(0, 3).join(', ')}]`;
+                desc += ` [samples: ${c.sampleValues
+                  .slice(0, 3)
+                  .map((value) => value.slice(0, 80))
+                  .join(', ')}]`;
               }
               return desc;
             })
             .join(', ');
+          const hiddenColumns = d.columns.length - visibleColumns.length;
           const sizeHint =
             d.rowCount > 10000
               ? ' ⚠️ LARGE DATASET — use focused filters and aggregations; use code only when the optional code-analysis tool is available.'
               : '';
-          return `- Dataset "${d.fileName}" (ID: ${d.id}): ${d.rowCount} rows, ${d.summary.totalColumns} columns.${sizeHint}\n  Columns: ${colDescriptions}`;
+          return `- Dataset "${d.fileName}" (ID: ${d.id}): ${d.rowCount} rows, ${d.summary.totalColumns} columns.${sizeHint}\n  Columns: ${colDescriptions}${
+            hiddenColumns > 0 ? ` (+${hiddenColumns} more; query focused columns only)` : ''
+          }`;
         })
-        .join('\n')}`;
+        .join('\n')}${
+        datasets.length > visibleDatasets.length
+          ? `\n- ${datasets.length - visibleDatasets.length} additional datasets omitted; ask the user to identify one if needed.`
+          : ''
+      }`;
     }
   } catch {
     /* no tabular data */

@@ -40,6 +40,11 @@ export type ConversationEvidence = {
   tabular?: ReusableTabularEvidence;
 };
 
+const MAX_TABULAR_EVIDENCE_ROWS = 25;
+const MAX_TABULAR_EVIDENCE_COLUMNS = 40;
+const MAX_TABULAR_EVIDENCE_CHARS = 12_000;
+const MAX_TABULAR_CELL_CHARS = 360;
+
 function unwrapJson(value: unknown): unknown {
   if (typeof value === 'string') {
     try {
@@ -124,22 +129,60 @@ function tabularEvidence(input: unknown, output: unknown): ReusableTabularEviden
   const result = unwrapJson(output) as Record<string, unknown> | undefined;
   if (!result || !Array.isArray(result.rows) || !Array.isArray(result.columns)) return undefined;
 
-  const rows = result.rows
-    .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object')
-    .slice(0, 50);
+  const columns = result.columns
+    .filter((column): column is string => typeof column === 'string')
+    .slice(0, MAX_TABULAR_EVIDENCE_COLUMNS);
+  const rows = compactTabularRowsForConversation(result.rows, columns);
   if (rows.length === 0) return undefined;
 
   return {
     datasetId: typeof params?.datasetId === 'string' ? params.datasetId : undefined,
-    columns: result.columns
-      .filter((column): column is string => typeof column === 'string')
-      .slice(0, 40),
+    columns,
     rows,
     totalRows:
       typeof result.totalRows === 'number' && Number.isFinite(result.totalRows)
         ? result.totalRows
         : rows.length,
   };
+}
+
+/** Keep only enough exact table evidence for a direct follow-up, never raw sheets. */
+export function compactTabularRowsForConversation(
+  values: unknown[],
+  columns: string[],
+): Array<Record<string, unknown>> {
+  const rows: Array<Record<string, unknown>> = [];
+  let serializedLength = 2;
+  for (const value of values) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    const row = value as Record<string, unknown>;
+    const compact = Object.fromEntries(
+      columns
+        .filter((column) => column in row)
+        .map((column) => [column, compactTabularCell(row[column])]),
+    );
+    if (Object.keys(compact).length === 0) continue;
+    const candidateLength = JSON.stringify(compact).length + (rows.length > 0 ? 1 : 0);
+    if (
+      rows.length >= MAX_TABULAR_EVIDENCE_ROWS ||
+      serializedLength + candidateLength > MAX_TABULAR_EVIDENCE_CHARS
+    ) {
+      break;
+    }
+    rows.push(compact);
+    serializedLength += candidateLength;
+  }
+  return rows;
+}
+
+function compactTabularCell(value: unknown): unknown {
+  if (typeof value === 'string') return value.slice(0, MAX_TABULAR_CELL_CHARS);
+  if (value === null || typeof value === 'number' || typeof value === 'boolean') return value;
+  try {
+    return JSON.stringify(value).slice(0, MAX_TABULAR_CELL_CHARS);
+  } catch {
+    return String(value).slice(0, MAX_TABULAR_CELL_CHARS);
+  }
 }
 
 /**
@@ -278,9 +321,10 @@ export function isTabularFollowUp(text: string, evidence: ConversationEvidence):
   }
   const words: string[] = text.toLocaleLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
   const directReference = /\b(?:it|this|that|these|those|above|previous|same)\b/i.test(text);
-  const tableColumnReference = evidence.tabular.columns.some((column) =>
-    words.includes(column.toLocaleLowerCase()),
-  );
+  const tableColumnReference = evidence.tabular.columns.some((column) => {
+    const columnTerms = column.toLocaleLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
+    return columnTerms.some((term) => term.length >= 3 && words.includes(term));
+  });
   const comparison = words.some(isNearComparisonWord);
   return directReference || tableColumnReference || comparison;
 }

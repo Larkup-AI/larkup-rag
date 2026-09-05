@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   continuesRecentMediaTopic,
+  compactTabularRowsForConversation,
   extractConversationEvidence,
   isTabularFollowUp,
 } from './conversation-memory';
@@ -131,6 +132,43 @@ describe('tabular conversation evidence', () => {
   it('treats a misspelled comparison as a follow-up to the shown table', () => {
     const evidence = extractConversationEvidence(messages);
     expect(isTabularFollowUp('what was the begisst area?', evidence)).toBe(true);
+  });
+
+  it('recognizes a meaningful word inside a descriptive table column on a follow-up', () => {
+    const evidence = extractConversationEvidence([
+      {
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-queryTabularData',
+            input: { datasetId: 'education-1' },
+            output: {
+              columns: ['International Bachelor dropout, first 3 semesters'],
+              rows: [{ 'International Bachelor dropout, first 3 semesters': '16%' }],
+              totalRows: 1,
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(isTabularFollowUp('Are the dropout rates administratively observed?', evidence)).toBe(
+      true,
+    );
+  });
+
+  it('bounds verbose table rows before they become follow-up context', () => {
+    const rows = compactTabularRowsForConversation(
+      Array.from({ length: 100 }, (_, index) => ({
+        Institution: `University ${index}`,
+        Notes: 'reported metric '.repeat(200),
+      })),
+      ['Institution', 'Notes'],
+    );
+
+    expect(rows).toHaveLength(25);
+    expect(JSON.stringify(rows).length).toBeLessThanOrEqual(12_000);
+    expect(String(rows[0].Notes)).toHaveLength(360);
   });
 
   it('does not reuse an active table when the user explicitly changes datasets', () => {

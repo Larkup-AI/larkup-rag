@@ -1,5 +1,18 @@
-import { describe, expect, it } from 'vitest';
-import { inspectYouTubeMetadata, parseYtDlpProgress } from './source-utils';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { inspectYouTubeMetadata, parseYtDlpProgress, resolveYtDlpMediaPath } from './source-utils';
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => fs.rm(directory, { recursive: true, force: true })),
+  );
+});
 
 describe('inspectYouTubeMetadata', () => {
   it('keeps the playlist total separate from the video selected by the watch URL', () => {
@@ -56,5 +69,29 @@ describe('parseYtDlpProgress', () => {
 
   it('ignores downloader log lines that contain no measured progress', () => {
     expect(parseYtDlpProgress('[youtube] Extracting URL')).toBeNull();
+  });
+});
+
+describe('resolveYtDlpMediaPath', () => {
+  it('uses the actual media output when yt-dlp reports a stale after-move filename', async () => {
+    const outputDir = await fs.mkdtemp(path.join(os.tmpdir(), 'larkup-source-utils-'));
+    temporaryDirectories.push(outputDir);
+    const reportedPath = path.join(outputDir, 'How Large Language Models Work [5sLYAQS9sWQ].mp4');
+    const actualPath = path.join(
+      outputDir,
+      'How Large Language Models Work [5sLYAQS9sWQ].f251.webm',
+    );
+    await fs.writeFile(actualPath, 'video bytes');
+
+    await expect(resolveYtDlpMediaPath(reportedPath, outputDir)).resolves.toBe(actualPath);
+  });
+
+  it('rejects a downloader path outside its isolated import directory', async () => {
+    const outputDir = await fs.mkdtemp(path.join(os.tmpdir(), 'larkup-source-utils-'));
+    temporaryDirectories.push(outputDir);
+
+    await expect(
+      resolveYtDlpMediaPath(path.join(os.tmpdir(), 'unrelated.mp4'), outputDir),
+    ).rejects.toThrow('outside its import directory');
   });
 });

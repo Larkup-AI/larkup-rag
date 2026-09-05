@@ -324,8 +324,31 @@ export interface TabularQueryResult {
   columns: string[];
   rows: Record<string, any>[];
   totalRows: number;
+  /** True when the returned rows are a bounded view of a larger result. */
+  truncated?: boolean;
   /** Summary of the query if aggregations were used */
   aggregationResults?: Record<string, number>;
+}
+
+/**
+ * Tabular queries always calculate against every matching row, but raw rows
+ * are returned to the chat/UI in a bounded page. This prevents a large Excel
+ * sheet from becoming an equally large tool payload or chat-history entry.
+ */
+export const DEFAULT_TABULAR_RESULT_LIMIT = 200;
+export const MAX_TABULAR_RESULT_LIMIT = 500;
+
+export function boundTabularRows<T>(rows: T[], requestedLimit?: number) {
+  const requested =
+    typeof requestedLimit === 'number' && Number.isFinite(requestedLimit) && requestedLimit > 0
+      ? Math.floor(requestedLimit)
+      : DEFAULT_TABULAR_RESULT_LIMIT;
+  const resultLimit = Math.min(requested, MAX_TABULAR_RESULT_LIMIT);
+  return {
+    rows: rows.slice(0, resultLimit),
+    totalRows: rows.length,
+    truncated: rows.length > resultLimit,
+  };
 }
 
 /** Execute a structured query against a tabular dataset. */
@@ -358,8 +381,8 @@ export async function queryTabular(query: TabularQueryRequest): Promise<TabularQ
             return filter.op === 'eq'
               ? String(val) === String(filter.value)
               : filter.op === 'neq'
-              ? String(val) !== String(filter.value)
-              : false;
+                ? String(val) !== String(filter.value)
+                : false;
           }
           switch (filter.op) {
             case 'eq':
@@ -414,8 +437,8 @@ export async function queryTabular(query: TabularQueryRequest): Promise<TabularQ
         grain === 'month'
           ? `${year}-${month}`
           : grain === 'quarter'
-          ? `${year}-Q${Math.floor(date.getUTCMonth() / 3) + 1}`
-          : String(year);
+            ? `${year}-Q${Math.floor(date.getUTCMonth() / 3) + 1}`
+            : String(year);
       return [{ ...row, [bucketColumn]: bucket }];
     });
   }
@@ -484,16 +507,19 @@ export async function queryTabular(query: TabularQueryRequest): Promise<TabularQ
     });
   }
 
-  const totalRows = rows.length;
-
-  if (query.limit && query.limit > 0) {
-    rows = rows.slice(0, query.limit);
-  }
+  const bounded = boundTabularRows(rows, query.limit);
+  rows = bounded.rows;
 
   const columns =
-    rows.length > 0 ? Object.keys(rows[0]) : query.columns ?? dataset.columns.map((c) => c.name);
+    rows.length > 0 ? Object.keys(rows[0]) : (query.columns ?? dataset.columns.map((c) => c.name));
 
-  return { columns, rows, totalRows, aggregationResults };
+  return {
+    columns,
+    rows,
+    totalRows: bounded.totalRows,
+    truncated: bounded.truncated,
+    aggregationResults,
+  };
 }
 
 function computeAgg(op: AggregationOp, values: number[]): number {

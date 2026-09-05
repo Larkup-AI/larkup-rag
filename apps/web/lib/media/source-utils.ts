@@ -288,25 +288,32 @@ export async function importMediaUrl(
       ],
       options.onProgress,
     );
-    return output
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => {
-        const item = JSON.parse(line) as {
-          path: string;
-          title: string;
-          originalUrl?: string;
-          ext: string;
-        };
-        const mimeType = mimeFromExtension(item.ext);
-        return {
-          path: item.path,
-          title: item.title,
-          originalUrl: item.originalUrl || url,
-          mimeType,
-          mediaType: mediaTypeFromMime(mimeType),
-        };
-      });
+    return await Promise.all(
+      output
+        .split('\n')
+        .filter(Boolean)
+        .map(async (line) => {
+          const item = JSON.parse(line) as {
+            path: string;
+            title: string;
+            originalUrl?: string;
+            ext: string;
+          };
+          // yt-dlp's after_move filepath can occasionally refer to an intermediate
+          // format file even though the final media was written under another name.
+          // Resolve it against the fresh output directory before handing it to storage.
+          const mediaPath = await resolveYtDlpMediaPath(item.path, options.outputDir);
+          const mimeType =
+            mimeFromExtension(path.extname(mediaPath).slice(1)) ?? mimeFromExtension(item.ext);
+          return {
+            path: mediaPath,
+            title: item.title,
+            originalUrl: item.originalUrl || url,
+            mimeType,
+            mediaType: mediaTypeFromMime(mimeType),
+          };
+        }),
+    );
   }
 
   const downloadStartedAt = Date.now();
@@ -387,6 +394,71 @@ export async function importMediaUrl(
       mediaType: mediaTypeFromMime(mimeType),
     },
   ];
+}
+
+/**
+ * `after_move:filepath` normally names yt-dlp's final file, but some releases
+ * can print a path that no longer exists after a format merge. The import
+ * directory is newly created for this one download, so a media file bearing the
+ * reported video id is a safe fallback without accepting paths outside it.
+ */
+export async function resolveYtDlpMediaPath(reportedPath: string, outputDir: string) {
+  const root = path.resolve(outputDir);
+  const expected = path.resolve(reportedPath);
+  if (!isPathWithinDirectory(expected, root)) {
+    throw new Error('Video downloader returned a file outside its import directory.');
+  }
+  try {
+    const stat = await fs.stat(expected);
+    if (stat.isFile()) return expected;
+  } catch (error) {
+    if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+  }
+
+  const videoId = path.basename(reportedPath).match(/\[([\w-]+)\](?:\.[^.]+)?$/)?.[1];
+  const candidates = await fs.readdir(root, { withFileTypes: true });
+  const availableMedia = candidates
+    .filter(
+      (candidate) =>
+        candidate.isFile() && Boolean(mimeFromExtension(path.extname(candidate.name).slice(1))),
+    )
+    .map((candidate) => path.join(root, candidate.name))
+    .filter((candidate) => isPathWithinDirectory(candidate, root));
+  if (!availableMedia.length) {
+    throw new Error('Video download completed but did not produce a readable media file.');
+  }
+
+  const expectedExtension = path.extname(reportedPath).toLowerCase();
+  return availableMedia.sort(
+    (left, right) =>
+      scoreYtDlpMediaCandidate(right, videoId, expectedExtension) -
+      scoreYtDlpMediaCandidate(left, videoId, expectedExtension),
+  )[0];
+}
+
+function isPathWithinDirectory(candidate: string, directory: string) {
+  const relative = path.relative(directory, candidate);
+  return (
+    relative !== '' &&
+    !relative.startsWith(`..${path.sep}`) &&
+    relative !== '..' &&
+    !path.isAbsolute(relative)
+  );
+}
+
+function scoreYtDlpMediaCandidate(
+  candidate: string,
+  videoId: string | undefined,
+  expectedExtension: string,
+) {
+  const fileName = path.basename(candidate);
+  const extension = path.extname(fileName).toLowerCase();
+  const mimeType = mimeFromExtension(extension.slice(1));
+  return (
+    (videoId && fileName.includes(`[${videoId}]`) ? 100 : 0) +
+    (mimeType?.startsWith('video/') ? 20 : 0) +
+    (extension === expectedExtension ? 10 : 0)
+  );
 }
 
 async function runYtDlp(args: string[], onProgress?: (progress: MediaImportProgress) => void) {
