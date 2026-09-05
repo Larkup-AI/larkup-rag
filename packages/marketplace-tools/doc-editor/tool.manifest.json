@@ -5,7 +5,7 @@
   "description": "AI-powered form filling and document editing with Canvas-style live preview.",
   "longDescription": "Open PDF, Word, PowerPoint, and text files in a split-view Canvas. AI fills forms using your knowledge base, edits content on request, and previews changes live. Supports PDF form fields (AcroForm), DOCX paragraphs/tables, PPTX slide text, and plain text editing. Uses pdf-lib (native) for PDF and the Docker sandbox for DOCX/PPTX via python-docx/python-pptx.",
   "category": "utility",
-  "version": "0.2.18",
+  "version": "0.2.20",
   "pricing": "free",
   "emoji": "📝",
   "icon": "FileEdit",

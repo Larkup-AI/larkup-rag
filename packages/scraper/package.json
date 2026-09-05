@@ -1,6 +1,6 @@
 {
   "name": "@larkup/scraper",
-  "version": "0.1.41",
+  "version": "0.1.42",
   "scripts": {
     "type-check": "tsc --noEmit"
   },

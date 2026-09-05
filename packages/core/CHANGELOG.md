@@ -1,5 +1,11 @@
 # @larkup/core
 
+## 0.5.3
+
+### Patch Changes
+
+- 36e524c: Keep large spreadsheet query results and tabular follow-up context bounded while preserving full-data aggregations.
+
 ## 0.5.2
 
 ### Patch Changes

@@ -7,7 +7,7 @@
   "description": "Help your AI understand your videos, so you can ask questions and get answers from the right moments.",
   "longDescription": "Turn videos into knowledge your AI can understand. It listens to what is said, reads what appears on screen, and helps you find the moments that matter.",
   "category": "media",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "pricing": "free",
   "emoji": "🎥",
   "icon": "Film",
@@ -91,7 +91,9 @@
   },
   "usage": {
     "label": "Usage this month",
-    "visibleWhenRuntimeMode": ["managed-cloud"],
+    "visibleWhenRuntimeMode": [
+      "managed-cloud"
+    ],
     "visualization": {
       "usedKey": "sourceMinutesUsed",
       "limitKey": "sourceMinutesLimit"
@@ -127,7 +129,9 @@
         "slot": "data-indexing",
         "title": "Let your AI understand this video",
         "entrypoint": "./ui",
-        "appliesTo": ["video"],
+        "appliesTo": [
+          "video"
+        ],
         "description": "Choose how deeply to analyze it and optionally point it to what matters most.",
         "estimate": {
           "modeField": "indexingMode",
@@ -589,7 +593,12 @@
       },
       "visibleWhen": {
         "field": "audioProvider",
-        "equals": ["openai", "groq", "deepgram", "elevenlabs"]
+        "equals": [
+          "openai",
+          "groq",
+          "deepgram",
+          "elevenlabs"
+        ]
       }
     },
     {
@@ -633,13 +642,23 @@
       "serverManaged": true
     }
   ],
-  "tags": ["video", "ocr", "tracking", "cloud", "gpu", "private", "gdpr"],
+  "tags": [
+    "video",
+    "ocr",
+    "tracking",
+    "cloud",
+    "gpu",
+    "private",
+    "gdpr"
+  ],
   "downloads": 0,
   "repositoryUrl": "https://github.com/Larkup-AI/larkup",
   "license": "Apache-2.0",
   "updatedAt": "2026-08-20",
   "trustLevel": "elevated",
   "permissions": {
-    "httpAllow": ["video.larkup.de"]
+    "httpAllow": [
+      "video.larkup.de"
+    ]
   }
 }

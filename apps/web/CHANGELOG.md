@@ -1,5 +1,17 @@
 # larkup
 
+## 0.2.12
+
+### Patch Changes
+
+- 36e524c: Keep large spreadsheet query results and tabular follow-up context bounded while preserving full-data aggregations.
+- 36e524c: Resolve stale yt-dlp post-processing file paths before storing imported videos.
+- Updated dependencies [36e524c]
+  - @larkup/core@0.5.3
+  - @larkup/marketplace@0.2.3
+  - @larkup/tool-doc-editor@0.2.20
+  - @larkup/scraper@0.1.42
+
 ## 0.2.11
 
 ### Patch Changes

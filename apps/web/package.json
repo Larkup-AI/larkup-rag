@@ -1,6 +1,6 @@
 {
   "name": "larkup",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "engines": {
     "node": ">=22"
   },
@@ -34,12 +34,12 @@
     "@base-ui/react": "^1.5.0",
     "@lancedb/lancedb": "^0.38.0",
     "@larkup/connections": "^0.2.0",
-    "@larkup/core": "^0.5.2",
+    "@larkup/core": "^0.5.3",
     "@larkup/integrations": "^0.2.1",
-    "@larkup/marketplace": "^0.2.2",
+    "@larkup/marketplace": "^0.2.3",
     "@larkup/sandbox": "^0.1.4",
-    "@larkup/scraper": "^0.1.41",
-    "@larkup/tool-doc-editor": "^0.2.19",
+    "@larkup/scraper": "^0.1.42",
+    "@larkup/tool-doc-editor": "^0.2.20",
     "@larkup/vector-stores": "^0.1.27",
     "@napi-rs/canvas": "1.0.8",
     "@tauri-apps/plugin-process": "^2.3.1",
