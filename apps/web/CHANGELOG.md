@@ -1,5 +1,11 @@
 # larkup
 
+## 0.2.13
+
+### Patch Changes
+
+- 3cfd252: Use a packaged ffprobe binary during video indexing so desktop and CLI installs do not depend on their inherited shell PATH.
+
 ## 0.2.12
 
 ### Patch Changes
