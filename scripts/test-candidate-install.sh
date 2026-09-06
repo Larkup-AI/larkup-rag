@@ -20,7 +20,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 cd "$PROJECT_ROOT"
-pnpm --filter larkup build
+pnpm -r --filter '{apps/web}...' --if-present build
 mkdir -p "$TEST_ROOT/pack-cache"
 (cd apps/web && NPM_CONFIG_CACHE="$TEST_ROOT/pack-cache" npm pack --pack-destination "$TEST_ROOT" --ignore-scripts >/dev/null)
 

@@ -10,7 +10,7 @@ try {
     New-Item -ItemType Directory -Path $TestRoot -Force | Out-Null
     Push-Location $ProjectRoot
     try {
-        pnpm --filter larkup build
+        pnpm -r --filter '{apps/web}...' --if-present build
         Push-Location (Join-Path $ProjectRoot 'apps/web')
         $env:NPM_CONFIG_CACHE = Join-Path $TestRoot 'pack-cache'
         New-Item -ItemType Directory -Path $env:NPM_CONFIG_CACHE -Force | Out-Null
