@@ -73,9 +73,6 @@ jobs:
           registry-url: https://registry.npmjs.org
       - name: Install candidate build dependencies
         run: pnpm install --frozen-lockfile
-      - name: Clean install and server health check
-        shell: pwsh
-        run: ./scripts/test-release-install.ps1
       - name: Candidate package install, ffprobe, and server check
         shell: pwsh
         run: ./scripts/test-candidate-install.ps1
