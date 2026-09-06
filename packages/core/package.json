@@ -70,16 +70,16 @@
     "./generator/generate-agent-runtime": "./src/generator/generate-agent-runtime.ts"
   },
   "dependencies": {
-    "@ai-sdk/cohere": "^4.0.35",
-    "@ai-sdk/deepseek": "^3.0.37",
-    "@ai-sdk/gateway": "^4.0.70",
-    "@ai-sdk/google": "^4.0.59",
+    "@ai-sdk/cohere": "^4.0.37",
+    "@ai-sdk/deepseek": "^3.0.39",
+    "@ai-sdk/gateway": "^4.0.73",
+    "@ai-sdk/google": "^4.0.63",
     "@ai-sdk/mcp": "^2.0.26",
-    "@ai-sdk/mistral": "^4.0.37",
-    "@ai-sdk/openai": "^4.0.53",
-    "@ai-sdk/openai-compatible": "^3.0.41",
+    "@ai-sdk/mistral": "^4.0.39",
+    "@ai-sdk/openai": "^4.0.57",
+    "@ai-sdk/openai-compatible": "^3.0.43",
     "@larkup/vector-stores": "workspace:*",
-    "ai": "^7.0.87"
+    "ai": "^7.0.91"
   },
   "devDependencies": {
     "@types/node": "^26",
