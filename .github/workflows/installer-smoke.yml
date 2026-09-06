@@ -7,6 +7,7 @@ on:
       - 'scripts/install.ps1'
       - 'scripts/install-local.sh'
       - 'scripts/test-release-install.*'
+      - 'scripts/test-candidate-install.*'
       - '.github/workflows/installer-smoke.yml'
       - 'apps/web/**'
       - 'packages/**'
@@ -18,6 +19,7 @@ on:
       - 'scripts/install.ps1'
       - 'scripts/install-local.sh'
       - 'scripts/test-release-install.*'
+      - 'scripts/test-candidate-install.*'
       - '.github/workflows/installer-smoke.yml'
   schedule:
     - cron: '20 5 * * *'
@@ -40,14 +42,21 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.11.0
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+      - name: Install candidate build dependencies
+        run: pnpm install --frozen-lockfile
       - name: Validate installer shell scripts
         run: scripts/test-install-scripts.sh
       - name: Clean install and server health check
         run: scripts/test-release-install.sh
+      - name: Candidate package install, ffprobe, and server check
+        run: scripts/test-candidate-install.sh
 
   windows:
     name: Windows x64 clean install
@@ -55,10 +64,18 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.11.0
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+      - name: Install candidate build dependencies
+        run: pnpm install --frozen-lockfile
       - name: Clean install and server health check
         shell: pwsh
         run: ./scripts/test-release-install.ps1
+      - name: Candidate package install, ffprobe, and server check
+        shell: pwsh
+        run: ./scripts/test-candidate-install.ps1
