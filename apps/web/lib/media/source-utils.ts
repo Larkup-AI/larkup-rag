@@ -6,6 +6,7 @@ import { isIP } from 'node:net';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
+import bundledFfprobe from '@ffprobe-installer/ffprobe';
 
 export type RemoteMediaType = 'audio' | 'video' | 'unknown';
 
@@ -169,9 +170,17 @@ export function deriveAudioSignals(
   return result;
 }
 
-/** Read local media metadata with the system ffprobe binary. */
+/**
+ * The desktop/CLI process does not necessarily inherit a terminal's PATH.
+ * Keep probing self-contained, while allowing managed deployments to override it.
+ */
+export function ffprobeExecutable() {
+  return process.env.LARKUP_FFPROBE_PATH?.trim() || bundledFfprobe.path;
+}
+
+/** Read local media metadata with a bundled ffprobe binary. */
 export async function probeMedia(mediaPath: string): Promise<MediaProbe> {
-  const output = await runProcess('ffprobe', [
+  const output = await runProcess(ffprobeExecutable(), [
     '-v',
     'error',
     '-show_entries',

@@ -2,7 +2,12 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { inspectYouTubeMetadata, parseYtDlpProgress, resolveYtDlpMediaPath } from './source-utils';
+import {
+  ffprobeExecutable,
+  inspectYouTubeMetadata,
+  parseYtDlpProgress,
+  resolveYtDlpMediaPath,
+} from './source-utils';
 
 const temporaryDirectories: string[] = [];
 
@@ -93,5 +98,24 @@ describe('resolveYtDlpMediaPath', () => {
     await expect(
       resolveYtDlpMediaPath(path.join(os.tmpdir(), 'unrelated.mp4'), outputDir),
     ).rejects.toThrow('outside its import directory');
+  });
+});
+
+describe('ffprobeExecutable', () => {
+  const originalPath = process.env.LARKUP_FFPROBE_PATH;
+
+  afterEach(() => {
+    if (originalPath === undefined) delete process.env.LARKUP_FFPROBE_PATH;
+    else process.env.LARKUP_FFPROBE_PATH = originalPath;
+  });
+
+  it('uses an explicit deployment override before the bundled binary', () => {
+    process.env.LARKUP_FFPROBE_PATH = '/custom/bin/ffprobe';
+    expect(ffprobeExecutable()).toBe('/custom/bin/ffprobe');
+  });
+
+  it('uses a packaged ffprobe binary when PATH is unavailable', () => {
+    delete process.env.LARKUP_FFPROBE_PATH;
+    expect(ffprobeExecutable()).toContain('ffprobe');
   });
 });

@@ -1,4 +1,5 @@
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 
 const standaloneRoot = path.resolve('.next/standalone');
@@ -15,6 +16,7 @@ rmSync(path.join(appRoot, 'public'), { force: true, recursive: true });
 
 copyDirectory('.next/static', path.join(appRoot, '.next/static'));
 copyDirectory('public', path.join(appRoot, 'public'));
+copyBundledFfprobe();
 
 pruneOtherPlatformNativePackages();
 removePrivateRuntimeState(standaloneRoot);
@@ -27,6 +29,29 @@ function copyDirectory(source, destination) {
 
   mkdirSync(destination, { recursive: true });
   cpSync(source, destination, { recursive: true });
+}
+
+/**
+ * The ffprobe installer resolves its platform package dynamically, which Next's
+ * output tracer cannot see. Copy that one platform package beside the traced
+ * wrapper so CLI/desktop installs can probe video without relying on PATH.
+ */
+function copyBundledFfprobe() {
+  const requireFromApp = createRequire(import.meta.url);
+  const platformPackage = `${process.platform}-${process.arch}`;
+  const standaloneWrapper = path.join(appRoot, 'node_modules/@ffprobe-installer/ffprobe');
+  if (!existsSync(standaloneWrapper)) return;
+  try {
+    const bundled = requireFromApp('@ffprobe-installer/ffprobe');
+    const wrapperRoot = realpathSync(standaloneWrapper);
+    copyDirectory(
+      path.dirname(bundled.path),
+      path.join(path.dirname(wrapperRoot), platformPackage),
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not package ffprobe for the standalone server: ${message}`);
+  }
 }
 
 function pruneOtherPlatformNativePackages() {
