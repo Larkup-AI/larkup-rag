@@ -1,5 +1,11 @@
 # larkup
 
+## 0.2.15
+
+### Patch Changes
+
+- fix: disable deterministic RAG for tabular queries to allow advanced models to smartly natively select the queryTabularData or executeAnalysis tools when dealing with Excel/CSV files.
+
 ## 0.2.14
 
 ### Patch Changes

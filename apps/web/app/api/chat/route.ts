@@ -158,28 +158,6 @@ function latestUserText(messages: UIMessage[]): string {
   return '';
 }
 
-function isLikelyTabularQuestion(text: string, columnNames: string[]): boolean {
-  if (
-    /\b(chart|graph|plot|visuali[sz]e|distribution|breakdown|trend|aggregate|sum|average|mean|median|count|total|highest|largest|biggest|smallest|lowest|least|most|top|bottom|compare)\b/i.test(
-      text,
-    )
-  ) {
-    return true;
-  }
-  const terms = new Set(text.toLocaleLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? []);
-  return columnNames.some((column) =>
-    (column.toLocaleLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? []).some(
-      (term) => term.length > 2 && terms.has(term),
-    ),
-  );
-}
-
-function requiresSandboxAnalysis(text: string): boolean {
-  return /\b(correlation|regression|cluster(?:ing)?|forecast(?:ing)?|statistical|hypothesis|outlier|anomaly|machine learning)\b/i.test(
-    text,
-  );
-}
-
 /**
  * Drive the investigation from structured tool results, never from a list of
  * domain or language-specific phrases in the user's question.
@@ -739,9 +717,9 @@ ${fieldLines}`;
     /^(hi|hello|hey|thanks|thank you|ok|sure|yes|no|please|help|how are you|good morning|good afternoon|good evening|bye|goodbye)[.!\s]*$/i.test(
       userText.trim(),
     );
-  const startsWithTabularQuery =
-    hasTabularData && isLikelyTabularQuestion(userText, tabularColumnNames);
-  const needsSandboxAnalysis = startsWithTabularQuery && requiresSandboxAnalysis(userText);
+  // When tabular data is present, we disable deterministic tool forcing
+  // and rely on the model's native tool selection, allowing it to smartly choose
+  // between searchKnowledgeBase, queryTabularData, and executeAnalysis.
   // Tool calling is not equally reliable across every supported provider.
   // Make the first evidence lookup deterministic for ordinary chat so the
   // answer model never has to decide whether retrieval is required.
@@ -749,7 +727,7 @@ ${fieldLines}`;
     userText.trim() &&
     !isGreeting &&
     !docSessionId &&
-    !startsWithTabularQuery &&
+    !hasTabularData &&
     !tabularFollowUp &&
     !reusesPriorEvidence &&
     !imagePreviewFollowUp &&
@@ -1105,26 +1083,20 @@ ${fieldLines}`;
                   };
             }
 
-            if (startsWithTabularQuery) {
-              if (stepNumber === 0) {
-                return {
-                  toolChoice: { type: 'tool', toolName: 'queryTabularData' },
-                  activeTools: ['queryTabularData'],
-                  messages: compactToolContextForModel(messages),
-                };
-              }
-              if (stepNumber >= (needsSandboxAnalysis ? 2 : 1)) {
-                // `activeTools: []` alone leaves the top-level `toolChoice: auto`
-                // in effect for some providers. They can then stop after the
-                // chart/table tool result without emitting a final answer.
+            if (hasTabularData) {
+              if (stepNumber >= 2) {
                 return {
                   toolChoice: 'none' as const,
                   activeTools: [],
                   messages: withFinalAnswerNudge(compactToolContextForModel(messages)),
                 };
               }
+              // Allow the model to decide natively between tabular and RAG tools
               return {
-                activeTools: needsSandboxAnalysis ? ['executeAnalysis'] : [],
+                activeTools: toolNames.filter(
+                  (name) =>
+                    (name as string) !== 'webSearch' && !evidenceQueryTools.includes(name as any),
+                ),
                 messages: compactToolContextForModel(messages),
               };
             }
