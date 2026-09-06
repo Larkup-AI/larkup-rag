@@ -466,10 +466,15 @@ export async function POST(req: Request) {
     messages.length > EVIDENCE_HISTORY_MESSAGES
       ? messages.slice(messages.length - EVIDENCE_HISTORY_MESSAGES)
       : messages;
-
   const safeMessages = messagesToProcess
     .map((m) => {
       const anyM = { ...m } as any;
+
+      // Strip IDs and reasoning from conversation history so the API provider doesn't attempt
+      // to strictly validate our compacted messages against its original signatures (e.g. o1/o3/Claude).
+      delete anyM.id;
+      delete anyM.reasoning;
+      delete anyM.providerOptions;
 
       // Tool invocations are rendered UI/execution data, not durable conversation
       // context. Fresh retrieval is required for every substantive question.
@@ -482,10 +487,13 @@ export async function POST(req: Request) {
           // Tool calls/results are execution details, not conversation. The
           // model retrieves fresh evidence for substantive questions, so keeping
           // rendered tables, artifacts, and tool UI here only wastes context.
+          // Also strip reasoning parts to avoid signature mismatch errors when
+          // passing a compacted history back to the model.
           if (
             part.type === 'tool-invocation' ||
             part.type === 'tool-result' ||
-            part.type?.startsWith('tool-')
+            part.type?.startsWith('tool-') ||
+            part.type === 'reasoning'
           ) {
             return [];
           }

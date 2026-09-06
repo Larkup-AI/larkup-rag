@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
-import { createWriteStream, promises as fs } from 'node:fs';
+import { chmodSync, createWriteStream, promises as fs } from 'node:fs';
 import { isIP } from 'node:net';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -175,7 +175,16 @@ export function deriveAudioSignals(
  * Keep probing self-contained, while allowing managed deployments to override it.
  */
 export function ffprobeExecutable() {
-  return process.env.LARKUP_FFPROBE_PATH?.trim() || bundledFfprobe.path;
+  const executable = process.env.LARKUP_FFPROBE_PATH?.trim() || bundledFfprobe.path;
+  if (executable === bundledFfprobe.path) {
+    try {
+      // Ensure the bundled binary is executable (npm global installs might strip +x if not in bin field)
+      chmodSync(executable, 0o755);
+    } catch {
+      // Ignore errors (e.g. read-only filesystem)
+    }
+  }
+  return executable;
 }
 
 /** Read local media metadata with a bundled ffprobe binary. */
