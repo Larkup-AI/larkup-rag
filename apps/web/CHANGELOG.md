@@ -1,5 +1,11 @@
 # larkup
 
+## 0.2.14
+
+### Patch Changes
+
+- fix: strip reasoning signatures and message IDs from compacted chat history to prevent follow-up messages failing with an EACCES/reasoning-signature error on reasoning models (e.g. GPT-5.5, o3). Also ensure the bundled ffprobe binary retains its executable permissions after a global npm install, resolving EACCES during video indexing.
+
 ## 0.2.13
 
 ### Patch Changes
