@@ -1,5 +1,19 @@
 # larkup
 
+## 0.2.16
+
+### Patch Changes
+
+- 4130731: Prefer the local Playwright crawler when Docker is available so JavaScript-protected pages can be scraped. Start it in the background with visible readiness and fallback status, retain the native fallback, and reject Anubis challenge pages.
+- 848cc4c: Route spreadsheet questions through structured table queries before optional code analysis, validate local Python analysis dependencies before exposing code tools, and index every non-empty Excel worksheet as a separate dataset.
+- Updated dependencies [4130731]
+- Updated dependencies [848cc4c]
+  - @larkup/scraper@0.1.43
+  - @larkup/core@0.5.4
+  - @larkup/sandbox@0.1.5
+  - @larkup/marketplace@0.2.4
+  - @larkup/tool-doc-editor@0.2.21
+
 ## 0.2.15
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @larkup/tool-video-intelligence
 
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies [4130731]
+  - @larkup/core@0.5.4
+
 ## 0.2.6
 
 ### Patch Changes

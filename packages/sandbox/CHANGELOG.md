@@ -1,5 +1,11 @@
 # @larkup/sandbox
 
+## 0.1.5
+
+### Patch Changes
+
+- 848cc4c: Route spreadsheet questions through structured table queries before optional code analysis, validate local Python analysis dependencies before exposing code tools, and index every non-empty Excel worksheet as a separate dataset.
+
 ## 0.1.4
 
 ### Patch Changes
