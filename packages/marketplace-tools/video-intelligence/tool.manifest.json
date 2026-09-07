@@ -7,7 +7,7 @@
   "description": "Help your AI understand your videos, so you can ask questions and get answers from the right moments.",
   "longDescription": "Turn videos into knowledge your AI can understand. It listens to what is said, reads what appears on screen, and helps you find the moments that matter.",
   "category": "media",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "pricing": "free",
   "emoji": "🎥",
   "icon": "Film",
