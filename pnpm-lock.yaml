@@ -298,22 +298,22 @@ importers:
         specifier: ^0.2.0
         version: link:../../packages/connections
       '@larkup/core':
-        specifier: ^0.5.3
+        specifier: ^0.5.4
         version: link:../../packages/core
       '@larkup/integrations':
         specifier: ^0.2.1
         version: link:../../packages/integrations
       '@larkup/marketplace':
-        specifier: ^0.2.3
+        specifier: ^0.2.4
         version: link:../../packages/marketplace
       '@larkup/sandbox':
-        specifier: ^0.1.4
+        specifier: ^0.1.5
         version: link:../../packages/sandbox
       '@larkup/scraper':
-        specifier: ^0.1.42
+        specifier: ^0.1.43
         version: link:../../packages/scraper
       '@larkup/tool-doc-editor':
-        specifier: ^0.2.20
+        specifier: ^0.2.21
         version: link:../../packages/marketplace-tools/doc-editor
       '@larkup/vector-stores':
         specifier: ^0.1.27
