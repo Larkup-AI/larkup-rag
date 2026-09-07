@@ -1,7 +1,7 @@
 import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readConfig } from '@larkup/core/config-store';
@@ -97,6 +97,24 @@ async function getProxy(): Promise<{
   return null;
 }
 
+function proxyFingerprint(proxy: Awaited<ReturnType<typeof getProxy>>): string {
+  return createHash('sha256')
+    .update(
+      proxy ? `${proxy.server}\u0000${proxy.username ?? ''}\u0000${proxy.password ?? ''}` : '',
+    )
+    .digest('hex');
+}
+
+async function configuredProxyFingerprint(): Promise<string> {
+  const config = await readConfig();
+  if (!config.useScraperProxy || !config.scraperProxyServer) return proxyFingerprint(null);
+  return proxyFingerprint({
+    server: config.scraperProxyServer,
+    username: config.scraperProxyUsername,
+    password: config.scraperProxyPassword,
+  });
+}
+
 export interface LocalFirecrawlState {
   running: boolean;
   endpoint: string;
@@ -106,6 +124,8 @@ export interface LocalFirecrawlState {
   project: string;
   /** `native` is the dependency-free crawler shipped with Larkup. */
   mode?: 'native' | 'firecrawl';
+  /** Hash of the proxy configuration applied to the browser containers. */
+  proxyFingerprint?: string;
   startedAt?: string;
   lastError?: string;
 }
@@ -118,6 +138,8 @@ const EMPTY: LocalFirecrawlState = {
   project: CONTAINER_PREFIX,
   mode: 'native',
 };
+
+let localStartPromise: Promise<LocalFirecrawlState> | undefined;
 
 function nativeState(startedAt?: string): LocalFirecrawlState {
   return {
@@ -298,20 +320,12 @@ ${apiEnv}
 
 /** Launch (or re-attach to) a local Firecrawl via docker compose. */
 export async function startLocal(): Promise<LocalFirecrawlState> {
-  // The normal CLI/curl/desktop install must work on a computer without
-  // Docker. Starting the built-in crawler is instantaneous; actual crawling
-  // happens on demand in the app process.
-  if (!isInsideDocker()) {
-    return writeState(nativeState());
-  }
-
+  // Use Firecrawl's Playwright service whenever Docker is available. The
+  // native crawler remains a zero-setup fallback, but it cannot execute the
+  // JavaScript challenges used by sites such as Anubis.
   const avail = await checkDocker();
   if (!avail.compose) {
-    return writeState({
-      ...(await readLocalState()),
-      running: false,
-      lastError: avail.message,
-    });
+    return writeState(nativeState());
   }
 
   const { compose } = await resolveDocker();
@@ -320,6 +334,7 @@ export async function startLocal(): Promise<LocalFirecrawlState> {
   let port = prev.port || DEFAULT_PORT;
 
   const proxy = await getProxy();
+  const currentProxyFingerprint = await configuredProxyFingerprint();
 
   await fs.mkdir(path.dirname(COMPOSE_PATH), { recursive: true });
   await fs.writeFile(COMPOSE_PATH, composeFile(apiKey, port, proxy), 'utf8');
@@ -336,20 +351,16 @@ export async function startLocal(): Promise<LocalFirecrawlState> {
         await runCmd(`${compose} -p ${CONTAINER_PREFIX} -f "${COMPOSE_PATH}" up -d`, 180_000);
       } catch (retryErr) {
         return writeState({
-          ...prev,
-          apiKey,
-          port,
-          running: false,
-          lastError: retryErr instanceof Error ? retryErr.message : 'docker compose retry failed',
+          ...nativeState(),
+          lastError:
+            'The browser crawler could not start, so the basic crawler is being used instead.',
         });
       }
     } else {
       return writeState({
-        ...prev,
-        apiKey,
-        port,
-        running: false,
-        lastError: message,
+        ...nativeState(),
+        lastError:
+          'The browser crawler could not start, so the basic crawler is being used instead.',
       });
     }
   }
@@ -359,18 +370,63 @@ export async function startLocal(): Promise<LocalFirecrawlState> {
   const endpoint = `http://${host}:${port}`;
   const healthy = await waitForHealth(endpoint, 90_000);
 
+  if (!healthy) {
+    return writeState({
+      ...nativeState(),
+      lastError:
+        'The browser crawler took too long to start, so the basic crawler is being used instead.',
+    });
+  }
+
   return writeState({
-    running: healthy,
+    running: true,
     endpoint,
     apiKey,
     port,
     project: CONTAINER_PREFIX,
     mode: 'firecrawl',
+    proxyFingerprint: currentProxyFingerprint,
     startedAt: new Date().toISOString(),
-    lastError: healthy
-      ? undefined
-      : 'Containers started but the API did not become healthy in time. It may still be warming up — try refreshing in a moment.',
   });
+}
+
+/**
+ * Start the browser crawler without making an API request wait for image pulls
+ * or browser boot. Callers can poll `isLocalStartInProgress` and the state.
+ */
+export async function startLocalInBackground(): Promise<{
+  state: LocalFirecrawlState;
+  starting: boolean;
+}> {
+  const state = await readLocalState();
+  const currentProxyFingerprint = await configuredProxyFingerprint();
+  if (
+    state.running &&
+    state.mode === 'firecrawl' &&
+    state.proxyFingerprint === currentProxyFingerprint
+  ) {
+    return { state, starting: false };
+  }
+
+  if (!localStartPromise) {
+    localStartPromise = startLocal()
+      .catch(() =>
+        writeState({
+          ...nativeState(),
+          lastError:
+            'The browser crawler could not start, so the basic crawler is being used instead.',
+        }),
+      )
+      .finally(() => {
+        localStartPromise = undefined;
+      });
+  }
+
+  return { state, starting: true };
+}
+
+export function isLocalStartInProgress(): boolean {
+  return Boolean(localStartPromise);
 }
 
 /**
@@ -402,12 +458,14 @@ export async function stopLocal(): Promise<LocalFirecrawlState> {
 /** Re-check whether the local instance is actually responding. */
 export async function refreshLocalStatus(): Promise<LocalFirecrawlState> {
   const state = await readLocalState();
-  if (state.mode === 'native') return nativeState(state.startedAt);
-  if (!state.startedAt) return nativeState();
+  if (state.mode === 'native' || !state.startedAt) return state;
   const healthy = await isHealthy(state.endpoint);
   if (healthy !== state.running) {
-    if (!healthy) return nativeState();
-    return writeState({ ...state, running: healthy });
+    return writeState({
+      ...state,
+      running: healthy,
+      lastError: healthy ? undefined : 'The browser crawler is not responding.',
+    });
   }
   return state;
 }

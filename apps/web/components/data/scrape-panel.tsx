@@ -43,6 +43,17 @@ import type { DataPrimaryAction } from '@/components/data/data-primary-action';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json() as Promise<{ config: RagConfig }>);
 
+type LocalCrawlerState = {
+  running: boolean;
+  mode?: 'native' | 'firecrawl';
+  lastError?: string;
+};
+
+type LocalCrawlerResponse = {
+  state: LocalCrawlerState;
+  starting?: boolean;
+};
+
 function domainOf(url: string) {
   try {
     return new URL(url).hostname;
@@ -114,9 +125,12 @@ export function ScrapePanel({
   /** When true: only the exact custom URLs are scraped — no deep crawl/pagination */
   const [specificUrls, setSpecificUrls] = useState(false);
   const [firecrawlConfigured, setFirecrawlConfigured] = useState<boolean | null>(null);
-  const crawlerStarted = useRef(false);
+  const [crawlerState, setCrawlerState] = useState<LocalCrawlerState | null>(null);
+  const [crawlerStarting, setCrawlerStarting] = useState(false);
+  const crawlerPolling = useRef<Promise<boolean> | null>(null);
   const { data: configData } = useSWR('/api/config', fetcher);
   const activeProvider = configData?.config?.webSearchProvider || 'tavily';
+  const crawlerProvider = configData?.config?.webCrawlerProvider || 'local';
   const [cachedQueries, setCachedQueries] = useState<string[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [displayPage, setDisplayPage] = useState(1);
@@ -132,25 +146,83 @@ export function ScrapePanel({
     });
   }
 
-  async function ensureCrawlerReady() {
-    if (crawlerStarted.current) return true;
-    const toastId = toast.loading('Preparing website search…');
+  async function readCrawlerStatus(): Promise<LocalCrawlerResponse> {
+    const res = await fetch('/api/firecrawl/local', { cache: 'no-store' });
+    const body = (await res.json()) as LocalCrawlerResponse & { error?: string };
+    if (!res.ok) throw new Error(body.error || 'Could not read crawler status.');
+    setCrawlerState(body.state);
+    setCrawlerStarting(Boolean(body.starting));
+    return body;
+  }
+
+  function pollCrawlerUntilReady(): Promise<boolean> {
+    if (crawlerPolling.current) return crawlerPolling.current;
+
+    crawlerPolling.current = (async () => {
+      for (let attempt = 0; attempt < 45; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
+        const status = await readCrawlerStatus();
+        if (status.state.running) return true;
+        if (!status.starting) return false;
+      }
+      setCrawlerStarting(false);
+      setCrawlerState((current) => ({
+        ...(current ?? { running: false }),
+        lastError: 'The browser crawler is still starting. Try again in a moment.',
+      }));
+      return false;
+    })().finally(() => {
+      crawlerPolling.current = null;
+    });
+
+    return crawlerPolling.current;
+  }
+
+  async function warmCrawler(): Promise<LocalCrawlerResponse | null> {
+    if (crawlerProvider === 'cloud') return null;
     try {
       const res = await fetch('/api/firecrawl/local', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'start' }),
       });
-      const body = await res.json();
+      const body = (await res.json()) as LocalCrawlerResponse & { error?: string };
       if (!res.ok) throw new Error(body.error || 'Could not prepare the crawler.');
-      crawlerStarted.current = true;
-      toast.dismiss(toastId);
-      return true;
+      setCrawlerState(body.state);
+      setCrawlerStarting(Boolean(body.starting));
+      if (body.starting) void pollCrawlerUntilReady();
+      return body;
     } catch (error) {
-      toast.dismiss(toastId);
-      toast.error(formatErrorMessage(error));
-      return false;
+      setCrawlerStarting(false);
+      setCrawlerState((current) => ({
+        ...(current ?? { running: false }),
+        lastError: formatErrorMessage(error),
+      }));
+      return null;
     }
+  }
+
+  async function ensureCrawlerReady() {
+    if (crawlerProvider === 'cloud') return true;
+    if (crawlerState?.running) return true;
+
+    const started = await warmCrawler();
+    if (!started) return false;
+    if (started.state.running) return true;
+    // A first Chromium image pull can take a while. Keep warming it in the
+    // background, but never make an "Add website" click look frozen; the
+    // native crawler remains available as an immediate fallback.
+    const ready = started.starting
+      ? await Promise.race([
+          pollCrawlerUntilReady(),
+          new Promise<false>((resolve) => setTimeout(() => resolve(false), 8_000)),
+        ])
+      : false;
+    if (!ready && started.starting) return true;
+    if (!ready) {
+      toast.error(started.state.lastError || 'The website crawler is not ready yet.');
+    }
+    return ready;
   }
 
   useEffect(() => {
@@ -211,6 +283,18 @@ export function ScrapePanel({
       .then((d) => setFirecrawlConfigured(d.configured ?? false))
       .catch(() => setFirecrawlConfigured(false));
   }, []);
+
+  useEffect(() => {
+    if (crawlerProvider !== 'local') return;
+    void (async () => {
+      try {
+        const status = await readCrawlerStatus();
+        if (status.state.mode !== 'firecrawl' || !status.state.running) await warmCrawler();
+      } catch {
+        await warmCrawler();
+      }
+    })();
+  }, [crawlerProvider]);
 
   const selectedUrls = useMemo(() => Object.keys(selected).filter((u) => selected[u]), [selected]);
 
@@ -405,8 +489,8 @@ export function ScrapePanel({
     // Removed setSearchState(null) so we append instead of clear
 
     try {
-      if (!(await ensureCrawlerReady())) return;
       if (activeProvider === 'local' || !activeProvider) {
+        if (!(await ensureCrawlerReady())) return;
         await Promise.all(queries.map((q) => searchFirecrawl(q, queries.length > 1)));
       } else {
         try {
@@ -414,7 +498,8 @@ export function ScrapePanel({
             queries.map((q) => searchGeneric(q, activeProvider, 1, queries.length > 1, false)),
           );
         } catch (err) {
-          toast.info(`using local crawler...`);
+          toast.info('Using local crawler…');
+          if (!(await ensureCrawlerReady())) return;
           await Promise.all(queries.map((q) => searchFirecrawl(q, queries.length > 1)));
         }
       }
@@ -583,7 +668,15 @@ export function ScrapePanel({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Could not start job');
+      if (!res.ok) {
+        if (res.status === 409 && data.code === 'already_scraped') {
+          toast.info('Already in your knowledge base', {
+            description: 'This URL has already been scraped and added.',
+          });
+          return false;
+        }
+        throw new Error(data.error ?? 'Could not start job');
+      }
 
       toast.success('Website added', {
         description: 'We’ll finish it in the background.',
@@ -736,7 +829,10 @@ export function ScrapePanel({
                     setQuery(e.target.value);
                     setShowDropdown(true);
                   }}
-                  onFocus={() => setShowDropdown(true)}
+                  onFocus={() => {
+                    setShowDropdown(true);
+                    void warmCrawler();
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       setShowDropdown(false);
@@ -787,6 +883,7 @@ export function ScrapePanel({
                         disabled={disabled}
                         className="pl-9 h-11 pr-16 bg-white"
                         onChange={(e) => setManualUrl(e.target.value)}
+                        onFocus={() => void warmCrawler()}
                         onKeyDown={(e) => e.key === 'Enter' && appendManualUrl()}
                       />
                     </div>

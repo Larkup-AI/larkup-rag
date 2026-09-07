@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import type { CrawlJob, DataGroup, SourceDocument, IndexRun, RagConfig } from '@larkup/core/types';
 import { Globe, FileUp, Type, Image, Plug, History, Loader2, Plus, KeyRound } from 'lucide-react';
 import { ScrapePanel } from '@/components/data/scrape-panel';
+import { WebCrawlerStatus } from '@/components/data/web-crawler-status';
 import { PastePanel } from '@/components/data/paste-panel';
 import { UploadPanel } from '@/components/data/upload-panel';
 import { MediaPanel } from '@/components/data/media-panel';
@@ -349,6 +350,7 @@ export function DataWorkspace({ view }: { view?: TopTabId } = {}) {
             </div>
 
             <div className="flex items-center gap-2">
+              {activeSubTab === 'website' && <WebCrawlerStatus />}
               {hasJobsDrawerContent && (
                 <TooltipProvider delay={150}>
                   <Tooltip>

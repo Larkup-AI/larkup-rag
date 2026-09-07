@@ -2,6 +2,7 @@ import type { CrawlJob, CrawlJobStatus, CrawlTarget } from '@larkup/core/types';
 import { getJob, updateJob } from '@larkup/core/jobs-store';
 import { addCrawledDocuments, type NewDocumentInput } from '@larkup/core/documents-store';
 import { cancelCrawl, getCrawlStatus, scrapePage, startCrawl } from './firecrawl';
+import { isBotProtectionPage } from './bot-protection';
 
 /**
  * Drives a crawl job forward by one increment.
@@ -18,16 +19,8 @@ const MAX_PAGES_PER_SYNC = 5;
 
 const inFlight = new Set<string>();
 
-function isBlockedPage(content: string): boolean {
-  if (!content) return false;
-  const lower = content.toLowerCase();
-  return (
-    lower.includes('verification successful. waiting for') ||
-    lower.includes('please verify you are a human') ||
-    lower.includes('checking if the site connection is secure') ||
-    lower.includes('just a moment...') ||
-    lower.includes('enable javascript and cookies to continue')
-  );
+export function isBlockedPage(content: string): boolean {
+  return isBotProtectionPage(content);
 }
 
 function rollUpStatus(targets: CrawlTarget[]): CrawlJobStatus {

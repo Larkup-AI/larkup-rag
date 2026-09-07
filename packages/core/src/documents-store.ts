@@ -128,13 +128,16 @@ export function addDocuments(inputs: NewDocumentInput[]): Promise<SourceDocument
 export function addCrawledDocuments(jobId: string, incoming: NewDocumentInput[]): Promise<number> {
   return serialize(async () => {
     const docs = await readDocuments();
-    const seen = new Set(docs.filter((d) => d.url).map((d) => d.url as string));
+    const seen = new Set(
+      docs.filter((d) => d.url).map((d) => `${d.groupId ?? 'default'}:${d.url}`),
+    );
     let added = 0;
     for (const input of incoming) {
-      if (input.url && seen.has(input.url)) continue;
+      const dedupeKey = `${input.groupId ?? 'default'}:${input.url}`;
+      if (input.url && seen.has(dedupeKey)) continue;
       if (!input.content.trim()) continue;
       docs.push(normalize({ ...input, jobId }));
-      if (input.url) seen.add(input.url);
+      if (input.url) seen.add(dedupeKey);
       added++;
     }
     if (added > 0) await writeAll(docs);

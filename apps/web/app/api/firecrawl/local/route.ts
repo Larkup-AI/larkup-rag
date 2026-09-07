@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import {
   checkDocker,
-  readLocalState,
   refreshLocalStatus,
-  startLocal,
+  startLocalInBackground,
   startNativeLocal,
   stopLocal,
+  isLocalStartInProgress,
   isInsideDocker,
   checkDockerSibling,
   connectDockerSibling,
@@ -48,6 +48,7 @@ export async function GET() {
     state: { ...safe, hasKey: Boolean(apiKey) },
     docker,
     runtimeEnv,
+    starting: isLocalStartInProgress(),
   });
 }
 
@@ -84,8 +85,16 @@ export async function POST(req: Request) {
     }
   }
 
-  // Web / Desktop: use docker compose CLI
-  const state = action === 'start' ? await startLocal() : await stopLocal();
+  // Starting Chromium can involve a first-time image pull. Respond right away
+  // and let the UI poll the explicit crawler status instead of leaving users
+  // stuck on an indefinite loading toast.
+  if (action === 'start') {
+    const { state, starting } = await startLocalInBackground();
+    const { apiKey, ...safe } = state;
+    return NextResponse.json({ state: { ...safe, hasKey: Boolean(apiKey) }, starting });
+  }
+
+  const state = await stopLocal();
   const { apiKey, ...safe } = state;
   return NextResponse.json({ state: { ...safe, hasKey: Boolean(apiKey) } });
 }

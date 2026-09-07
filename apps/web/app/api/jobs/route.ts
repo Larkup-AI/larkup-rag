@@ -49,13 +49,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
   }
 
+  // Resolve the destination group first so the duplicate check is scoped to
+  // that group only. A URL in a different group is not a duplicate.
+  const resolvedGroupId = await resolveGroupId(body.groupId);
+
   const docs = await readDocuments();
-  const existingUrls = new Set(docs.filter((d) => d.url).map((d) => d.url!));
+  const existingUrls = new Set(
+    docs
+      .filter((d) => {
+        if (!d.url) return false;
+        // Docs with no groupId are implicitly in the Default group.
+        const docGroup = d.groupId ?? 'default';
+        return docGroup === resolvedGroupId;
+      })
+      .map((d) => d.url!),
+  );
 
   const targets = new Map<string, CrawlTarget>();
+  let validUrlCount = 0;
+  let duplicateCount = 0;
 
   (body.targets ?? []).forEach((t) => {
     if (!t.url || !/^https?:\/\//i.test(t.url)) return;
+    validUrlCount++;
 
     try {
       const u = new URL(t.url);
@@ -65,7 +81,9 @@ export async function POST(req: Request) {
       // crawl, begin at the site root so the frontier can discover the site.
       const scope = t.scope === 'domain' ? 'domain' : 'page';
       const targetUrl = scope === 'domain' ? origin : u.toString();
-      if (!existingUrls.has(targetUrl)) {
+      if (existingUrls.has(targetUrl)) {
+        duplicateCount++;
+      } else {
         targets.set(targetUrl, {
           url: targetUrl,
           scope,
@@ -75,7 +93,9 @@ export async function POST(req: Request) {
       }
     } catch {
       // Fallback for weird URLs
-      if (!existingUrls.has(t.url)) {
+      if (existingUrls.has(t.url)) {
+        duplicateCount++;
+      } else {
         targets.set(t.url, {
           url: t.url,
           scope: t.scope === 'domain' ? 'domain' : 'page',
@@ -89,6 +109,16 @@ export async function POST(req: Request) {
   const cleaned = [...targets.values()];
 
   if (cleaned.length === 0) {
+    // All submitted URLs were valid but already indexed in this group — surface a helpful message.
+    if (validUrlCount > 0 && duplicateCount === validUrlCount) {
+      return NextResponse.json(
+        {
+          error: 'This URL has already been added to your knowledge base.',
+          code: 'already_scraped',
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       { error: 'Select at least one valid new URL to scrape.' },
       { status: 400 },
@@ -103,7 +133,7 @@ export async function POST(req: Request) {
     pageLimit: Math.min(Math.max(body.pageLimit ?? 2000, 1), 2000),
     pagesCrawled: 0,
     docCount: 0,
-    groupId: await resolveGroupId(body.groupId),
+    groupId: resolvedGroupId,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

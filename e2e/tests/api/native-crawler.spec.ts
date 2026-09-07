@@ -6,20 +6,40 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DEFAULT_CONFIG } from '../../../packages/core/src/types';
 import { writeConfig } from '../../../packages/core/src/config-store';
-import { readLocalState, startLocal, stopLocal } from '../../../packages/scraper/src/local-runtime';
+import {
+  readLocalState,
+  startNativeLocal,
+  stopLocal,
+} from '../../../packages/scraper/src/local-runtime';
 import { isFirecrawlConfigured, searchWeb } from '../../../packages/scraper/src/firecrawl';
+import { isBlockedPage } from '../../../packages/scraper/src/job-runner';
 import {
   getNativeCrawlStatus,
   startNativeCrawl,
   nativeScrapePage,
 } from '../../../packages/scraper/src/native-crawler';
 
-test('curl-style local install starts the built-in crawler without Docker', async () => {
+const originalDataDir = process.env.LARKUP_DATA_DIR;
+let testDataDir: string | undefined;
+
+test.beforeEach(async () => {
+  testDataDir = await mkdtemp(path.join(tmpdir(), 'larkup-native-crawler-config-'));
+  process.env.LARKUP_DATA_DIR = testDataDir;
+});
+
+test.afterEach(async () => {
+  if (originalDataDir === undefined) delete process.env.LARKUP_DATA_DIR;
+  else process.env.LARKUP_DATA_DIR = originalDataDir;
+  if (testDataDir) await rm(testDataDir, { recursive: true, force: true });
+  testDataDir = undefined;
+});
+
+test('the built-in crawler remains available as a Docker-free fallback', async () => {
   const originalCwd = process.cwd();
   const workspace = await mkdtemp(path.join(tmpdir(), 'larkup-native-crawler-'));
   try {
     process.chdir(workspace);
-    const state = await startLocal();
+    const state = await startNativeLocal();
 
     expect(state.running).toBe(true);
     expect(state.mode).toBe('native');
@@ -111,6 +131,16 @@ test('native crawler sends local scrape traffic through the saved proxy', async 
   }
 });
 
+test('Anubis proof-of-work pages are not accepted as website content', () => {
+  expect(
+    isBlockedPage(`
+      Making sure you're not a bot!
+      Anubis could not load its JavaScript. The server may be overloaded.
+      Protected by Anubis From Techaro.
+    `),
+  ).toBe(true);
+});
+
 test('native domain crawl reports an inaccessible site instead of completing empty', async () => {
   const originalCwd = process.cwd();
   const originalFetch = globalThis.fetch;
@@ -140,7 +170,7 @@ test('native crawler search falls back when its primary public source is rate-li
   const workspace = await mkdtemp(path.join(tmpdir(), 'larkup-native-search-fallback-'));
   try {
     process.chdir(workspace);
-    await startLocal();
+    await startNativeLocal();
     let requestCount = 0;
     globalThis.fetch = (async () => {
       requestCount++;

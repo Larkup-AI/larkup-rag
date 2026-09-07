@@ -8,6 +8,7 @@ import {
   nativeScrapePage,
   startNativeCrawl,
 } from './native-crawler';
+import { isBotProtectionPage } from './bot-protection';
 
 /**
  * Minimal, dependency-free Firecrawl v1 client.
@@ -25,7 +26,10 @@ import {
 const CLOUD_BASE = 'https://api.firecrawl.dev/v1';
 
 export class FirecrawlError extends Error {
-  constructor(message: string, readonly status?: number) {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
     super(message);
     this.name = 'FirecrawlError';
   }
@@ -175,6 +179,22 @@ export async function scrapePage(url: string): Promise<ScrapedPage> {
     const page = await nativeScrapePage(url);
     return { url: page.url, title: page.title, markdown: page.markdown };
   }
+
+  // A normal HTTP request is much faster and avoids launching Chromium for
+  // ordinary, server-rendered pages. When it returns a bot challenge (or
+  // cannot read the page), fall through to the local browser crawler.
+  if (endpoint.mode === 'local') {
+    try {
+      const page = await nativeScrapePage(url);
+      if (!isBotProtectionPage(page.markdown)) {
+        return { url: page.url, title: page.title, markdown: page.markdown };
+      }
+    } catch {
+      // The browser crawler gets a chance to handle JavaScript-only pages,
+      // browser-specific navigation, and HTTP blocks.
+    }
+  }
+
   const json = await call<FcScrapeResponse>('/scrape', {
     method: 'POST',
     body: JSON.stringify({
