@@ -115,25 +115,56 @@ export function hasPriorKnowledgeBaseEvidence(messages: ChatMessageWithToolParts
   });
 }
 
+function extractMessageText(message: ChatMessageWithToolParts): string {
+  const anyM = message as any;
+  if (typeof anyM.content === 'string') return anyM.content;
+  const parts = Array.isArray(anyM.parts)
+    ? anyM.parts
+    : Array.isArray(anyM.content)
+      ? anyM.content
+      : [];
+  return parts
+    .filter((p: any) => p.type === 'text' && typeof p.text === 'string')
+    .map((p: any) => p.text)
+    .join(' ');
+}
+
 /**
  * Keep retrieval efficient for natural continuations such as "what about it?"
  * while treating every new standalone question as a fresh lookup.
  */
-export function isLikelyKnowledgeFollowUp(text: string): boolean {
+export function isLikelyKnowledgeFollowUp(
+  text: string,
+  messages?: ChatMessageWithToolParts[],
+): boolean {
   const normalized = text.trim().toLowerCase();
   if (!normalized) return false;
-  return (
+
+  const hasFollowUpKeywords =
     /^(?:and|also|then|so)\b/.test(normalized) ||
     /^(?:tell me more|continue|go on|can you (?:explain|elaborate|clarify))\b/.test(normalized) ||
-    /\b(?:it|this|that|they|them|those|these|its|their)\b/.test(normalized)
-  );
+    /\b(?:it|this|that|they|them|those|these|its|their)\b/.test(normalized);
+
+  if (hasFollowUpKeywords) return true;
+
+  if (messages && messages.length > 0) {
+    const userMessages = messages.filter((m) => m.role === 'user');
+    if (userMessages.length >= 2) {
+      const prevUserText = extractMessageText(userMessages[userMessages.length - 2]);
+      if (prevUserText.trim().toLowerCase() === normalized) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 export function canReuseKnowledgeBaseEvidence(
   text: string,
   messages: ChatMessageWithToolParts[],
 ): boolean {
-  return isLikelyKnowledgeFollowUp(text) && hasPriorKnowledgeBaseEvidence(messages);
+  return isLikelyKnowledgeFollowUp(text, messages) && hasPriorKnowledgeBaseEvidence(messages);
 }
 
 /** The chat workspace is intentionally a retrieval-only experience. */
@@ -152,10 +183,12 @@ export function retrievalToolsForStep<ToolName extends string>(options: {
   toolNames: readonly ToolName[];
   /** Reserve this and every later step for the model's final answer. */
   finalAnswerStep?: number;
-}): {
-  toolChoice?: { type: 'tool'; toolName: ToolName } | 'none';
-  activeTools?: ToolName[];
-} | undefined {
+}):
+  | {
+      toolChoice?: { type: 'tool'; toolName: ToolName } | 'none';
+      activeTools?: ToolName[];
+    }
+  | undefined {
   const { stepNumber, forceKnowledgeBaseSearch, forceWebSearch, toolNames, finalAnswerStep } =
     options;
   const without = (...blocked: string[]) => toolNames.filter((name) => !blocked.includes(name));

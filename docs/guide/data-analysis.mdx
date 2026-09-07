@@ -1,16 +1,19 @@
 ---
-title: "Analyze Tabular Data"
-description: "Upload a spreadsheet or CSV and ask analytical questions. Larkup returns charts and summaries directly in Chat."
+title: 'Analyze Tabular Data'
+description: 'Upload a spreadsheet or CSV and ask analytical questions. Larkup returns charts and summaries directly in Chat.'
 ---
 
 Larkup understands structured data. Upload an Excel or CSV file and the AI can aggregate rows, compute totals, compare categories, and render the result as a bar chart, line chart, or table inside the Chat conversation.
 
 ## Loading the data
 
-Go to **Data → Files** and drag in your `.xlsx`, `.csv`, or `.json` file. Larkup detects the structure automatically. Column types, row count, and the data schema are shown before you confirm.
+Go to **Data → Files** and drag in your `.xlsx`, `.csv`, or `.json` file. Larkup detects the structure automatically. Column types, row count, and the data schema are shown before you confirm. Workbooks with multiple non-empty worksheets are loaded as separate named datasets, which lets you ask about one sheet or compare them in the same chat.
 
 <Frame caption="A 500-row Excel file staged for upload with column schema preview">
-  <img src="/images/add/upload-excel-data.png" alt="Excel file staged in the Files tab with column types detected" />
+  <img
+    src="/images/add/upload-excel-data.png"
+    alt="Excel file staged in the Files tab with column types detected"
+  />
 </Frame>
 
 Click **Start Indexing** to begin. Progress is shown in real time.
@@ -35,7 +38,10 @@ Larkup reads the relevant rows, computes the answer, and renders the chart or ta
 </Frame>
 
 <Frame caption="Chart with a later summary and suggestions">
-  <img src="/images/chat/chart-in-chat2.png" alt="Detailed chart answer with analysis and later suggestions" />
+  <img
+    src="/images/chat/chart-in-chat2.png"
+    alt="Detailed chart answer with analysis and later suggestions"
+  />
 </Frame>
 
 Each chart response includes a **Copy Data** button and a **CSV** export so you can take the output into another tool. Later questions build on the previous answer. You can drill down into a specific category, change the chart type, or ask for a written summary without uploading the data again.

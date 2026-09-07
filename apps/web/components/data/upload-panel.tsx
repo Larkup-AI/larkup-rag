@@ -216,20 +216,26 @@ export function UploadPanel({
         } else if (ext === 'xlsx' || ext === 'xls') {
           const data = await file.arrayBuffer();
           const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-          const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const rawRows = XLSX.utils.sheet_to_json(sheet) as Record<string, any>[];
-          const rows = rawRows.map((row) => {
-            const out: Record<string, any> = {};
-            for (const [k, v] of Object.entries(row)) {
-              out[k] = v instanceof Date ? v.toISOString().split('T')[0] : v;
-            }
-            return out;
-          });
-          if (rows.length > 0) {
+          const hasMultipleSheets = workbook.SheetNames.length > 1;
+          let indexedSheets = 0;
+          for (const sheetName of workbook.SheetNames) {
+            const sheet = workbook.Sheets[sheetName];
+            const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: null }) as Record<
+              string,
+              any
+            >[];
+            const rows = rawRows.map((row) => {
+              const out: Record<string, any> = {};
+              for (const [k, v] of Object.entries(row)) {
+                out[k] = v instanceof Date ? v.toISOString().split('T')[0] : v;
+              }
+              return out;
+            });
+            if (rows.length === 0) continue;
             const keys = Object.keys(rows[0] as object);
             next.push({
-              id,
-              name: file.name,
+              id: `${id}-${indexedSheets}`,
+              name: hasMultipleSheets ? `${file.name} — ${sheetName}` : file.name,
               size: file.size,
               format: 'structured',
               rows,
@@ -241,6 +247,10 @@ export function UploadPanel({
               globalMetadata: [],
               indexAsTabular: true,
             });
+            indexedSheets++;
+          }
+          if (indexedSheets === 0) {
+            toast.error(`Could not find tabular rows in ${file.name}.`);
           }
         } else if (ext === 'json') {
           const content = await file.text();

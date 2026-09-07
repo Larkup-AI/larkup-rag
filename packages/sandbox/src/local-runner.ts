@@ -16,6 +16,11 @@ type Command = { executable: string; args: string[] };
 
 let pythonCommand: Command | null | undefined;
 
+// Keep this list in sync with the capabilities advertised by executeAnalysis
+// and analyzeCorpusWithCode. A bare Python installation is not an analysis
+// runtime, so it must not make those tools appear available.
+const ANALYSIS_PYTHON_MODULES = ['numpy', 'pandas', 'matplotlib', 'scipy', 'sklearn', 'seaborn'];
+
 function run(command: Command, args: string[], cwd?: string, timeoutMs = 10_000) {
   return new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve, reject) => {
     const child = spawn(command.executable, [...command.args, ...args], {
@@ -49,7 +54,7 @@ function run(command: Command, args: string[], cwd?: string, timeoutMs = 10_000)
       resolve({
         stdout,
         stderr: timedOut ? `${stderr}\nExecution timed out.`.trim() : stderr,
-        exitCode: timedOut ? 124 : code ?? 1,
+        exitCode: timedOut ? 124 : (code ?? 1),
       });
     });
   });
@@ -60,14 +65,14 @@ async function resolvePython(): Promise<Command | null> {
   const candidates: Command[] = process.env.LARKUP_PYTHON
     ? [{ executable: process.env.LARKUP_PYTHON, args: [] }]
     : process.platform === 'win32'
-    ? [
-        { executable: 'py', args: ['-3'] },
-        { executable: 'python', args: [] },
-      ]
-    : [
-        { executable: 'python3', args: [] },
-        { executable: 'python', args: [] },
-      ];
+      ? [
+          { executable: 'py', args: ['-3'] },
+          { executable: 'python', args: [] },
+        ]
+      : [
+          { executable: 'python3', args: [] },
+          { executable: 'python', args: [] },
+        ];
 
   for (const candidate of candidates) {
     try {
@@ -132,6 +137,32 @@ export async function checkLocalRuntime(): Promise<SandboxHealthCheck> {
       backend: 'local',
       error:
         'Local code execution needs Python 3. Install Python or choose Docker or a remote sandbox provider.',
+    };
+  }
+
+  try {
+    const dependencyCheck = await run(python, [
+      '-c',
+      `import importlib.util\nmodules = ${JSON.stringify(
+        ANALYSIS_PYTHON_MODULES,
+      )}\nmissing = [name for name in modules if importlib.util.find_spec(name) is None]\nprint(','.join(missing))\nraise SystemExit(bool(missing))`,
+    ]);
+    if (dependencyCheck.exitCode !== 0) {
+      const missing = dependencyCheck.stdout.trim() || 'required analysis packages';
+      return {
+        status: 'error',
+        backend: 'local',
+        error:
+          `Local Python is missing ${missing}. Install the Larkup analysis dependencies ` +
+          `(for example: pip install ${ANALYSIS_PYTHON_MODULES.join(' ')}) or choose Docker or a remote sandbox provider.`,
+      };
+    }
+  } catch {
+    return {
+      status: 'error',
+      backend: 'local',
+      error:
+        'Larkup could not verify the Python analysis dependencies. Choose Docker or a remote sandbox provider.',
     };
   }
   return { status: 'ready', backend: 'local' };

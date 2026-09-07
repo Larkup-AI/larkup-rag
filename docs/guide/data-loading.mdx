@@ -6,7 +6,10 @@ description: 'Crawl websites, upload files, pull integrations, and track every i
 Larkup gives you one **Data** page for every source. Add content once, and Larkup indexes it in the background.
 
 <Frame caption="The Data page, with a tab for every source">
-  <img src="/images/add/website-tab.png" alt="Data page with Files, Text, Website, Media, and Integrations tabs" />
+  <img
+    src="/images/add/website-tab.png"
+    alt="Data page with Files, Text, Website, Media, and Integrations tabs"
+  />
 </Frame>
 
 <Tabs>
@@ -22,14 +25,16 @@ Larkup gives you one **Data** page for every source. Add content once, and Larku
     <Frame caption="A running crawl job">
       <img src="/images/crawl/crawl-jobs-view.png" alt="Running crawl job with page count and status" />
     </Frame>
+
   </Tab>
 
   <Tab title="Files">
-    Drop in PDF, Word, CSV, JSON, Excel, or plain text. Structured files get a column and schema preview before you confirm.
+    Drop in PDF, Word, CSV, JSON, Excel, or plain text. Structured files get a column and schema preview before you confirm. For an Excel workbook, every non-empty worksheet is loaded as its own named dataset so Chat can query the right sheet.
 
     <Frame caption="Files staged with a schema preview">
       <img src="/images/add/files-tab2.png" alt="Files tab with a PDF and an Excel schema preview" />
     </Frame>
+
   </Tab>
 
   <Tab title="Text">
@@ -38,6 +43,7 @@ Larkup gives you one **Data** page for every source. Add content once, and Larku
     <Frame caption="Adding raw text directly">
       <img src="/images/add/text-tab.png" alt="Add Text tab with a title and content field" />
     </Frame>
+
   </Tab>
 
   <Tab title="Media">
@@ -46,6 +52,7 @@ Larkup gives you one **Data** page for every source. Add content once, and Larku
     <Frame caption="Importing a video from a URL">
       <img src="/images/add/media-tab.png" alt="Add Media tab with a YouTube URL import" />
     </Frame>
+
   </Tab>
 
   <Tab title="Integrations">
@@ -67,6 +74,7 @@ Larkup gives you one **Data** page for every source. Add content once, and Larku
     | Salesforce | CRM | Accounts, contacts, and opportunities |
 
     Don't see what you need? Select **Ask for integration**. Sync again anytime to pull fresh content.
+
   </Tab>
 </Tabs>
 
@@ -83,7 +91,10 @@ Every loaded document lands in **Data → All Data**, with its source, status, a
 Configure the web scraper and web search provider under **Settings → Search & Scraping**. No `.env` editing required.
 
 <Frame caption="Search & Scraping settings">
-  <img src="/images/crawl/search-scraping-settings.png" alt="Web search and web scraper provider settings" />
+  <img
+    src="/images/crawl/search-scraping-settings.png"
+    alt="Web search and web scraper provider settings"
+  />
 </Frame>
 
 Prefer hosted crawling? Add a Firecrawl or Serper.dev API key here instead of running the local crawler. Organizations that route traffic through a proxy can set it here too.

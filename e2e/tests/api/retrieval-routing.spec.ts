@@ -146,6 +146,30 @@ test.describe('Retrieval-only chat routing', () => {
     expect(canReuseKnowledgeBaseEvidence('What about it?', messages)).toBe(true);
   });
 
+  test('reuses evidence if the user repeats exactly the same question', () => {
+    const messages = [
+      {
+        role: 'user',
+        content: 'what do i like to eat',
+      },
+      {
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-searchKnowledgeBase',
+            output: { hits: [{ title: 'Food', text: 'You like mango.' }] },
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: 'what do i like to eat',
+      },
+    ];
+
+    expect(canReuseKnowledgeBaseEvidence('what do i like to eat', messages)).toBe(true);
+  });
+
   test('does not reuse an empty or failed search result', () => {
     const messages = [
       {

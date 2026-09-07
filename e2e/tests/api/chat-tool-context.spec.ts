@@ -7,6 +7,10 @@ import {
 import { inferTabularPlan } from '../../../apps/web/lib/chat/tabular-query-plan';
 import { hasRetrievedPdfEvidence } from '../../../apps/web/lib/chat/visual-routing';
 import {
+  isLikelyTabularQuestion,
+  tabularToolsForStep,
+} from '../../../apps/web/lib/chat/tabular-routing';
+import {
   compactTabularRowsForConversation,
   extractConversationEvidence,
   isTabularFollowUp,
@@ -132,6 +136,38 @@ test('plans the CSV demo questions as bounded table queries', () => {
     groupBy: ['Region'],
     aggregations: [{ column: 'Net Revenue', op: 'sum' }],
   });
+});
+
+test('starts every spreadsheet question with the structured data tool', () => {
+  const firstStep = tabularToolsForStep({
+    stepNumber: 0,
+    toolNames: ['queryTabularData', 'executeAnalysis', 'searchKnowledgeBase'],
+  });
+  expect(firstStep).toEqual({
+    toolChoice: { type: 'tool', toolName: 'queryTabularData' },
+    activeTools: ['queryTabularData'],
+  });
+  expect(tabularToolsForStep({ stepNumber: 2, toolNames: ['queryTabularData'] })).toEqual({
+    toolChoice: 'none',
+    activeTools: [],
+  });
+});
+
+test('keeps PDF questions on document retrieval when a workbook is also uploaded', () => {
+  expect(
+    isLikelyTabularQuestion({
+      text: 'What does the signed PDF say about the renewal date?',
+      columnNames: ['University', 'Modeled integration expenditure'],
+      datasetNames: ['university-costs.xlsx'],
+    }),
+  ).toBe(false);
+  expect(
+    isLikelyTabularQuestion({
+      text: 'Which university had the highest modeled integration expenditure in 2025?',
+      columnNames: ['University', 'Modeled integration expenditure'],
+      datasetNames: ['university-costs.xlsx'],
+    }),
+  ).toBe(true);
 });
 
 test('routes a PDF retrieval to live local page inspection even without indexed images', () => {

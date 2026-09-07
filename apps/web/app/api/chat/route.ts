@@ -48,6 +48,7 @@ import {
   withFinalAnswerNudge,
 } from '@/lib/chat/tool-context';
 import { requestsVisualization } from '@/lib/chat/tabular-visualization';
+import { isLikelyTabularQuestion, tabularToolsForStep } from '@/lib/chat/tabular-routing';
 import {
   hasRetrievedImageEvidence,
   hasRetrievedPdfEvidence,
@@ -546,6 +547,7 @@ export async function POST(req: Request) {
   let tabularContext = '';
   let hasTabularData = false;
   let tabularColumnNames: string[] = [];
+  let tabularDatasetNames: string[] = [];
   try {
     const datasets = await listTabularDatasets();
     if (datasets.length > 0) {
@@ -553,8 +555,14 @@ export async function POST(req: Request) {
       tabularColumnNames = datasets.flatMap((dataset) =>
         dataset.columns.map((column) => column.name),
       );
-      const visibleDatasets = datasets.slice(0, 8);
-      tabularContext = `\n\nAvailable tabular datasets:\n${visibleDatasets
+      tabularDatasetNames = datasets.map((dataset) => dataset.fileName);
+      // Keep complete schemas for the most likely targets, then keep a compact
+      // ID/name listing for the remaining uploads. Previously only eight files
+      // were visible to the model, making a later spreadsheet effectively
+      // impossible to select in a mixed-upload conversation.
+      const detailedDatasets = datasets.slice(0, 12);
+      const compactDatasets = datasets.slice(12, 40);
+      tabularContext = `\n\nAvailable tabular datasets:\n${detailedDatasets
         .map((d) => {
           const visibleColumns = d.columns.slice(0, 60);
           const colDescriptions = visibleColumns
@@ -582,8 +590,17 @@ export async function POST(req: Request) {
           }`;
         })
         .join('\n')}${
-        datasets.length > visibleDatasets.length
-          ? `\n- ${datasets.length - visibleDatasets.length} additional datasets omitted; ask the user to identify one if needed.`
+        compactDatasets.length > 0
+          ? `\nAdditional datasets (use their ID when the question names one):\n${compactDatasets
+              .map(
+                (d) =>
+                  `- Dataset "${d.fileName}" (ID: ${d.id}): ${d.rowCount} rows, ${d.summary.totalColumns} columns.`,
+              )
+              .join('\n')}`
+          : ''
+      }${
+        datasets.length > detailedDatasets.length + compactDatasets.length
+          ? `\n- ${datasets.length - detailedDatasets.length - compactDatasets.length} further datasets are available; ask the user which file they mean if it is not named in the question.`
           : ''
       }`;
     }
@@ -631,6 +648,11 @@ ${fieldLines}`;
     .join('\n\n');
   const userText = latestUserText(messagesToProcess);
   const reusableEvidence = extractConversationEvidence(evidenceMessages);
+  const tabularQuestion = isLikelyTabularQuestion({
+    text: userText,
+    columnNames: tabularColumnNames,
+    datasetNames: tabularDatasetNames,
+  });
   const isExplicitVideoCorrection =
     /^(?:no|nah),\s+|\b(?:that(?:'s| is) (?:wrong|incorrect)|correction\s*:|actually\s*,|instead\s*,|should be|not .{0,80}\bbut|i meant)\b/i.test(
       userText,
@@ -727,7 +749,7 @@ ${fieldLines}`;
     userText.trim() &&
     !isGreeting &&
     !docSessionId &&
-    !hasTabularData &&
+    (!hasTabularData || !tabularQuestion) &&
     !tabularFollowUp &&
     !reusesPriorEvidence &&
     !imagePreviewFollowUp &&
@@ -1083,21 +1105,24 @@ ${fieldLines}`;
                   };
             }
 
-            if (hasTabularData) {
-              if (stepNumber >= 2) {
-                return {
-                  toolChoice: 'none' as const,
-                  activeTools: [],
-                  messages: withFinalAnswerNudge(compactToolContextForModel(messages)),
-                };
-              }
-              // Allow the model to decide natively between tabular and RAG tools
+            if (hasTabularData && tabularQuestion) {
+              // Exact spreadsheet questions should always start with the
+              // structured query engine. It works for large sheets without a
+              // Python environment and removes model/provider variance that
+              // previously sent simple "highest/lowest" questions to code.
+              // A second bounded query lets the model compare another uploaded
+              // sheet when needed. Code analysis remains available only after
+              // the reliable table path has produced evidence.
+              const routing = tabularToolsForStep({ stepNumber, toolNames: toolNames as string[] });
               return {
-                activeTools: toolNames.filter(
-                  (name) =>
-                    (name as string) !== 'webSearch' && !evidenceQueryTools.includes(name as any),
+                ...routing,
+                activeTools: routing.activeTools.filter(
+                  (name) => !evidenceQueryTools.includes(name as any),
                 ),
-                messages: compactToolContextForModel(messages),
+                messages:
+                  routing.toolChoice === 'none'
+                    ? withFinalAnswerNudge(compactToolContextForModel(messages))
+                    : compactToolContextForModel(messages),
               };
             }
 
